@@ -50,6 +50,37 @@ bool two_threads() {
   return true;
 }
 
+void guard(Spinlock& lock, size_t guard_num, std::atomic<int> &tower, std::atomic<bool> &verdict) {
+  for (size_t i = 0; i < 5; ++i) {
+    lock.lock();
+    tower.store(guard_num);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (tower.load() != guard_num) {
+      std::cout << "Error: another guard is in the tower!" << std::endl;
+      verdict.store(false);
+    }
+    lock.unlock();
+  }
+}
+
+bool guard_test(size_t guard_count) {
+  Spinlock lock;
+  std::atomic<int> tower;
+  std::atomic<bool> verdict;
+  verdict.store(true);
+
+  std::thread arr[guard_count];
+  for (size_t i = 0; i < guard_count; ++i) {
+    arr[i] = std::thread(
+      [&lock, i, &tower, &verdict] {
+        guard(lock, i, tower, verdict);
+      });
+  }
+  for (size_t i = 0; i < guard_count; ++i) {
+    arr[i].join();
+  }
+  return verdict.load();
+}
 
 int main() {
   std::string answers[2] = {"FAILED", "OK"};
@@ -59,6 +90,8 @@ int main() {
   std::cout << "Simple test: " << answers[verdict] << std::endl;
   verdict = two_threads();
   std::cout << "Two-threads test: " << answers[verdict] << std::endl;
+  verdict = guard_test(6);
+  std::cout << "Guard test: " << answers[verdict] << std::endl;
 
   return 0;
 }
